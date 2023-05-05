@@ -55,5 +55,4 @@ test/test_runner
 Data/*
 **/build/
 
-*.off
 *.png
