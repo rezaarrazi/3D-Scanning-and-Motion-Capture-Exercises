@@ -13,16 +13,30 @@ int main()
 	// implicit surface
 	ImplicitSurface* surface;
 	// TODO: you have to switch between these surface types
-	surface = new Sphere(Eigen::Vector3d(0.5, 0.5, 0.5), 0.4);
-	//surface = new Torus(Eigen::Vector3d(0.5, 0.5, 0.5), 0.4, 0.1);
-	//surface = new Hoppe(filenameIn);
-	//surface = new RBF(filenameIn);
+	// surface = new Sphere(Eigen::Vector3d(0.5, 0.5, 0.5), 0.4);
+	// surface = new Torus(Eigen::Vector3d(0.5, 0.5, 0.5), 0.4, 0.1);
+	// surface = new Hoppe(filenameIn);
+	surface = new RBF(filenameIn);
+
+	float progress = 0.0;
+	int barWidth = 70;
 
 	// fill volume with signed distance values
 	unsigned int mc_res = 50; // resolution of the grid, for debugging you can reduce the resolution (-> faster)
 	Volume vol(Vector3d(-0.1,-0.1,-0.1), Vector3d(1.1,1.1,1.1), mc_res, mc_res, mc_res, 1);
 	for (unsigned int x = 0; x < vol.getDimX(); x++)
 	{
+		progress = (float(x+1)/float(vol.getDimX()));
+		std::cout << "[";
+		int pos = barWidth * progress;
+		for (int pb = 0; pb < barWidth; ++pb) {
+			if (pb < pos) std::cout << "=";
+			else if (pb == pos) std::cout << ">";
+			else std::cout << " ";
+		}
+		std::cout << "] (" << x+1 << "/" << vol.getDimX() << ") " << (progress * 100.0) << " %\r";
+		std::cout.flush();
+		
 		for (unsigned int y = 0; y < vol.getDimY(); y++)
 		{
 			for (unsigned int z = 0; z < vol.getDimZ(); z++)
@@ -33,7 +47,8 @@ int main()
 			}
 		}
 	}
-
+	std::cout << std::endl;
+	
 	// extract the zero iso-surface using marching cubes
 	SimpleMesh mesh;
 	for (unsigned int x = 0; x < vol.getDimX() - 1; x++)

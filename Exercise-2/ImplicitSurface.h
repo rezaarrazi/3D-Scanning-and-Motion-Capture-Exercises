@@ -5,6 +5,7 @@
 
 #include "Eigen.h"
 #include "SimpleMesh.h"
+#include <iostream>
 
 class ImplicitSurface
 {
@@ -23,7 +24,11 @@ public:
 	double Eval(const Eigen::Vector3d& _x)
 	{
 		// TODO: implement the implicit sphere formula using the member variables m_center and m_radius
-		return 0.0;
+		double x = _x(0) - this->m_center(0);
+		double y = _x(1) - this->m_center(1);
+		double z = _x(2) - this->m_center(2);
+
+		return x*x + y*y + z*z - this->m_radius*this->m_radius;
 	}
 
 private:
@@ -42,7 +47,13 @@ public:
 	double Eval(const Eigen::Vector3d& _x)
 	{
 		// TODO: implement the implicit torus formula using the  variables m_center, m_radius (radius of the ring) and the radius m_a (small radius)
-		return 0.0;
+		const double x = _x(0) - this->m_center(0);
+		const double y = _x(1) - this->m_center(1);
+		const double z = _x(2) - this->m_center(2);
+
+		double sum = x*x + y*y + z*z + this->m_radius*this->m_radius - this->m_a*this->m_a;
+
+		return sum*sum - 4*this->m_radius*this->m_radius*(x*x + y*y);
 	}
 
 private:
@@ -70,7 +81,7 @@ public:
 		Eigen::Vector3f n = m_pointcloud.GetNormals()[idx];
 
 		// TODO: implement the evaluation using Hoppe's method (see lecture slides)
-		return 0.0;
+		return (x-p).transpose() * n;
 	}
 
 private:
@@ -270,6 +281,14 @@ public:
 		// hint: Eigen provides a norm() function to compute the l2-norm of a vector (e.g. see macro phi(i,j))
 		double result = 0.0;
 
+		for (unsigned int i = 0; i < m_numCenters; ++i)
+		{
+			result += m_coefficents(i) * EvalBasis((m_funcSamp.m_pos[i] - _x).norm());
+		}
+
+		// add the linear and constant parts
+		Vector3d b = Vector3d(m_coefficents(m_numCenters), m_coefficents(m_numCenters+1), m_coefficents(m_numCenters+2));
+    	result += (b.transpose() * _x) + m_coefficents(m_numCenters + 3);
 
 		return result;
 	}
@@ -296,8 +315,27 @@ private:
 		// you can access matrix elements using for example A(i,j) for the i-th row and j-th column
 		// similar you access the elements of the vector b, e.g. b(i) for the i-th element
 
+		for (unsigned int i = 0; i < m_numCenters; ++i)
+		{
+			for (unsigned int j = 0; j < m_numCenters; ++j)
+			{
+				A(i, j) = phi(i, j);
+				A(i + m_numCenters, j) = phi(i + m_numCenters, j);
+			}
 
+			A(i, m_numCenters) = m_funcSamp.m_pos[i].x();
+			A(i, m_numCenters + 1) = m_funcSamp.m_pos[i].y();
+			A(i, m_numCenters + 2) = m_funcSamp.m_pos[i].z();
+			A(i, m_numCenters + 3) = 1;
 
+			A(i + m_numCenters, m_numCenters) = m_funcSamp.m_pos[i + m_numCenters].x();
+			A(i + m_numCenters, m_numCenters + 1) = m_funcSamp.m_pos[i + m_numCenters].y();
+			A(i + m_numCenters, m_numCenters + 2) = m_funcSamp.m_pos[i + m_numCenters].z();
+			A(i + m_numCenters, m_numCenters + 3) = 1;
+
+			b(i) = 0;
+			b(i + m_numCenters) = m_funcSamp.m_val[i + m_numCenters];
+		}
 
 		// build the system matrix and the right hand side of the normal equation
 		m_systemMatrix = A.transpose() * A;
