@@ -16,7 +16,10 @@ struct GaussianCostFunction
 	bool operator()(const T* const mu, const T* const sigma, T* residual) const
 	{
 		// TODO: Implement the cost function
-		residual[0] = T(0.0);
+		T x = T(point.x);
+		T y = T(point.y);
+		T predicted = (1.0 / (sqrt(2.0 * M_PI * (*sigma) * (*sigma)))) * exp(-((x - (*mu)) * (x - (*mu))) / (2.0 * (*sigma) * (*sigma)));
+		residual[0] = (y - predicted);
 		return true;
 	}
 
