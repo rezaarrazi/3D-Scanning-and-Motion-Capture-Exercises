@@ -111,9 +111,21 @@ public:
         // class.
         // Important: Ceres automatically squares the cost function.
 
-        residuals[0] = T(0);
-		residuals[1] = T(0);
-		residuals[2] = T(0);
+        // Convert pose parameters to a PoseIncrement object
+        PoseIncrement<T> poseIncrement(const_cast<T*>(pose));
+
+        // Apply pose increment to the source point
+        Eigen::Matrix<T, 3, 1> sourcePointT = m_sourcePoint.cast<T>();
+        Eigen::Matrix<T, 3, 1> transformedPointT;
+        poseIncrement.apply(sourcePointT.data(), transformedPointT.data());
+
+        // Calculate the difference between the transformed source point and the target point
+        Eigen::Matrix<T, 3, 1> diff = transformedPointT - m_targetPoint.cast<T>();
+
+        // Store the result in the residuals array
+        residuals[0] = diff(0) * T(m_weight);
+        residuals[1] = diff(1) * T(m_weight);
+        residuals[2] = diff(2) * T(m_weight);
 
         return true;
     }
@@ -148,7 +160,20 @@ public:
         // class.
         // Important: Ceres automatically squares the cost function.
 
-        residuals[0] = T(0);
+        // Convert pose parameters to a PoseIncrement object
+        PoseIncrement<T> poseIncrement(const_cast<T*>(pose));
+
+        // Apply pose increment to the source point
+        Eigen::Matrix<T, 3, 1> sourcePointT = m_sourcePoint.cast<T>();
+        Eigen::Matrix<T, 3, 1> transformedPointT;
+        poseIncrement.apply(sourcePointT.data(), transformedPointT.data());
+
+        // Calculate the difference between the transformed source point and the target point
+        Eigen::Matrix<T, 3, 1> diff = transformedPointT - m_targetPoint.cast<T>();
+
+        // Calculate the dot product of the difference and the target normal
+        Eigen::Matrix<T, 3, 1> targetNormalT = m_targetNormal.cast<T>();
+        residuals[0] = diff.dot(targetNormalT) * T(m_weight);
 
         return true;
     }
@@ -236,6 +261,14 @@ protected:
 
                 // TODO: Invalidate the match (set it to -1) if the angle between the normals is greater than 60
                 
+                // Calculate the dot product of the normals
+                float dotProduct = sourceNormal.dot(targetNormal);
+
+                // If the cosine of the angle is less than cos60, the angle is greater than 60 degrees
+                if (dotProduct < std::cos(M_PI / 3)) {
+                    // Invalidate the match
+                    match.idx = -1;
+                }
             }
         }
     }
@@ -247,7 +280,9 @@ protected:
  */
 class CeresICPOptimizer : public ICPOptimizer {
 public:
-    CeresICPOptimizer() {}
+    CeresICPOptimizer() :
+        m_weight{1.0f}
+    { }
 
     virtual void estimatePose(const PointCloud& source, const PointCloud& target, Matrix4f& initialPose) override {
         // Build the index of the FLANN tree (for fast nearest neighbor lookup).
@@ -305,6 +340,8 @@ public:
 
 
 private:
+    float m_weight; // Weight for cost functions
+    
     void configureSolver(ceres::Solver::Options& options) {
         // Ceres options.
         options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;
@@ -329,7 +366,8 @@ private:
 
                 // TODO: Create a new point-to-point cost function and add it as constraint (i.e. residual block) 
                 // to the Ceres problem.
-
+                ceres::CostFunction* pointToPointCostFunc = PointToPointConstraint::create(sourcePoint, targetPoint, m_weight);
+                problem.AddResidualBlock(pointToPointCostFunc, nullptr, poseIncrement.getData());
 
                 if (m_bUsePointToPlaneConstraints) {
                     const auto& targetNormal = targetNormals[match.idx];
@@ -339,7 +377,8 @@ private:
 
                     // TODO: Create a new point-to-plane cost function and add it as constraint (i.e. residual block) 
                     // to the Ceres problem.
-
+                    ceres::CostFunction* pointToPlaneCostFunc = PointToPlaneConstraint::create(sourcePoint, targetPoint, targetNormal, m_weight);
+                    problem.AddResidualBlock(pointToPlaneCostFunc, nullptr, poseIncrement.getData());
 
                 }
             }
@@ -427,7 +466,14 @@ private:
             const auto& n = targetNormals[i];
 
             // TODO: Add the point-to-plane constraints to the system
+            A(i, 0) = n[2]*s[1] - n[1]*s[2];
+            A(i, 1) = n[0]*s[2] - n[2]*s[0];
+            A(i, 2) = n[1]*s[0] - n[0]*s[1];
+            A(i, 3) = n[0];
+            A(i, 4) = n[1];
+            A(i, 5) = n[2];
 
+            b(i) = n.dot(d - s);
 
             // TODO: Add the point-to-point constraints to the system
 
@@ -438,7 +484,7 @@ private:
         }
 
         // TODO: Solve the system
-        VectorXf x(6);
+        VectorXf x = A.jacobiSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(b);
 
 
         float alpha = x(0), beta = x(1), gamma = x(2);
@@ -452,7 +498,8 @@ private:
 
         // TODO: Build the pose matrix using the rotation and translation matrices
         Matrix4f estimatedPose = Matrix4f::Identity();
-
+        estimatedPose.block<3,3>(0,0) = rotation;
+        estimatedPose.block<3,1>(0,3) = translation;
 
         return estimatedPose;
     }

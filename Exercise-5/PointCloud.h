@@ -82,7 +82,10 @@ public:
                 }
 
                 // TODO: Compute the normals using central differences. 
-                normalsTmp[idx] = Vector3f(1, 1, 1); // Needs to be replaced.
+                Vector3f point_du = pointsTmp[idx + 1] - pointsTmp[idx - 1];
+                Vector3f point_dv = pointsTmp[idx + width] - pointsTmp[idx - width];
+
+                normalsTmp[idx] = point_du.cross(point_dv); // Cross product to get normal
                 normalsTmp[idx].normalize();
             }
         }
